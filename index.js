@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const axios = require('axios');
 const winston = require('winston');
 const crypto = require('crypto');
 const sqlite3 = require('better-sqlite3');
@@ -91,6 +92,7 @@ const identity = {
     }
 };
 
+app.use(express.json());
 app.use((req, res, next) => {
     logger.debug(`${req.method} ${req.path}`);
     next();
@@ -98,6 +100,11 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
     const path = req.path;
     if(path.startsWith('/api') || path.startsWith('/metadata') || path.startsWith('/deltas')) {
+        if(path == '/api/resolve-dav-hosts') {
+            next();
+            return;
+        }
+
         const authheader = req.headers.authorization;
         if(authheader) {
             const auth = authheader.split(' ')[1];
@@ -128,6 +135,16 @@ app.get('/onboarding', (req, res) => {
         <div id="identity-result" style="display:none;">${identityEncoded}</div>
     </body>
 </html>`);
+});
+
+// API
+app.post('/api/resolve-dav-hosts', async (req, res) => {
+    try {
+        const hosts = await axios.post('https://id.getmailspring.com/api/resolve-dav-hosts', req.body);
+        res.json(hosts.data);
+    } catch(err) {
+        res.status(err.response.status).json(err.response.data);
+    }
 });
 app.get('/api/me', (req, res) => {
     res.json(identity);
