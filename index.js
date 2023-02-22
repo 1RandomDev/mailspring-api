@@ -5,6 +5,7 @@ const winston = require('winston');
 const crypto = require('crypto');
 const sqlite3 = require('better-sqlite3');
 const fs = require('fs');
+const path = require('path');
 
 const API_PORT = 5101;
 
@@ -25,7 +26,8 @@ if(!fs.existsSync('./data')) {
     fs.mkdirSync('./data');
 }
 const db = sqlite3('./data/mailspring-api.db');
-db.exec('CREATE TABLE IF NOT EXISTS metadata(cursor INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR NOT NULL, accountId VARCHAR NOT NULL, data VARCHAR NOT NULL);');
+db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId VARCHAR, identityId VARCHAR, accountId VARCHAR);')
+db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR);');
 
 let sessions = [];
 const identity = {
@@ -136,6 +138,15 @@ app.get('/onboarding', (req, res) => {
     </body>
 </html>`);
 });
+app.get(/\/open\/.+/, (req, res) => {
+    const messageId = req.path.match(/\/open\/(.+)/)[1];
+    const accountId = req.query.me;
+    const recipient = Buffer.from(req.query.recipient, 'base64').toString();
+    console.log(messageId, accountId, recipient);
+    
+
+    res.sendFile(path.resolve('./blank.gif'));
+});
 
 // API
 app.post('/api/resolve-dav-hosts', async (req, res) => {
@@ -151,6 +162,57 @@ app.get('/api/me', (req, res) => {
 });
 
 // Metadata
+app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
+    const pathValues = req.path.match(/\/metadata\/(.+)\/(.+)\/(.+)/);
+    const accountId = pathValues[1];
+    const objectId = pathValues[2];
+    const pluginId = pathValues[3];
+
+    if(!req.body) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'No data provided'});
+        return;
+    }
+    if(!req.body.objectType) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "objectType" is required'});
+        return;
+    }
+    if(!req.body.value) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "value" is required'});
+        return;
+    }
+    if(!req.body.version) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "version" is required'});
+        return;
+    }
+
+    let stmt = db.prepare('SELECT * FROM objects WHERE object = \'metadata\' AND object_id = ? AND object_type = ? AND aid = ? AND plugin_id = ? AND identity_id = ?;');
+    let object = stmt.get(objectId, req.body.objectType, accountId, pluginId, req.identity.id);
+    
+    if(object) {
+        // Update
+        if(req.body.version >= object.v) {
+            object.v++;
+            object.value = req.body.value;
+            stmt = db.prepare('UPDATE objects SET v = ?, value = ? WHERE object = \'metadata\' AND object_id = ? AND object_type = ? AND aid = ? AND plugin_id = ? AND identity_id = ?;');
+            stmt.run(object.v, JSON.stringify(object.value), objectId, req.body.objectType, accountId, pluginId, req.identity.id);
+            res.json(object);
+        } else {
+            res.status(409).json({statusCode: 409, error: 'Conflict', message: 'Version conflict'});
+            return;
+        }
+    } else {
+        // Create
+        db.transaction(() => {
+            stmt = db.prepare('INSERT INTO objects(object_id, object, object_type, aid, identity_id, plugin_id, v, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?);');
+            stmt.run(objectId, 'metadata', req.body.objectType, accountId, req.identity.id, pluginId, 1, JSON.stringify(req.body.value));
+            
+            stmt = db.prepare('SELECT * FROM objects WHERE id = last_insert_rowid();');
+            object = stmt.get();
+            object.value = JSON.parse(object.value);
+            res.json(object);
+        })();
+    }
+});
 app.get(/\/metadata\/.+/, (req, res) => {
     const accountId = req.path.match(/\/metadata\/(.+)/)[1];
     const limit = req.query.limit || 500;
