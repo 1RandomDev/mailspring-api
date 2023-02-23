@@ -26,8 +26,8 @@ if(!fs.existsSync('./data')) {
     fs.mkdirSync('./data');
 }
 const db = sqlite3('./data/mailspring-api.db');
-db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR);')
-db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR);');
+db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR, timestamp INTEGER);')
+db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR, timestamp INTEGER);');
 
 let sessions = [];
 const identity = {
@@ -264,8 +264,8 @@ app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
     } else {
         // Create
         db.transaction(() => {
-            stmt = db.prepare('INSERT INTO objects(object_id, object, object_type, aid, identity_id, plugin_id, v, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?);');
-            stmt.run(objectId, 'metadata', req.body.objectType, accountId, req.identity.id, pluginId, 1, JSON.stringify(req.body.value));
+            stmt = db.prepare('INSERT INTO objects(object_id, object, object_type, aid, identity_id, plugin_id, v, value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);');
+            stmt.run(objectId, 'metadata', req.body.objectType, accountId, req.identity.id, pluginId, 1, JSON.stringify(req.body.value), Math.round(Date.now() / 1000));
             
             stmt = db.prepare('SELECT * FROM objects WHERE id = last_insert_rowid();');
             object = stmt.get();
@@ -344,6 +344,8 @@ app.get(/\/deltas\/.+\/streaming/, (req, res) => {
         logger.debug('Stream closed: '+JSON.stringify(session));
     }
     sessions.push(session);
+
+    res.on('close', () => session.close());
     logger.debug('Stream initialized: '+JSON.stringify(session));
 });
 
@@ -353,8 +355,8 @@ app.listen(API_PORT, () => {
 
 function emitEvent(eventName, object) {
     db.transaction(() => {
-        let stmt = db.prepare('INSERT INTO events(event, object, objectId, identityId, accountId) VALUES (?, ?, ?, ?, ?);');
-        stmt.run(eventName, object.object, object.id, object.identity_id, object.aid);
+        let stmt = db.prepare('INSERT INTO events(event, object, objectId, identityId, accountId, timestamp) VALUES (?, ?, ?, ?, ?, ?);');
+        stmt.run(eventName, object.object, object.id, object.identity_id, object.aid, Math.round(Date.now() / 1000));
     
         stmt = db.prepare('SELECT * FROM events WHERE id = last_insert_rowid();');
         let event = stmt.get();
