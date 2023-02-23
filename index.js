@@ -217,13 +217,13 @@ app.get(/\/metadata\/.+/, (req, res) => {
     const accountId = req.path.match(/\/metadata\/(.+)/)[1];
     const limit = req.query.limit || 500;
     const offset = req.query.offset || 0;
-    const stmt = db.prepare('SELECT data FROM metadata WHERE identityId = ? AND accountId = ? LIMIT ? OFFSET ?;');
+    const stmt = db.prepare('SELECT * FROM objects WHERE object = \'metadata\' AND aid = ? AND identity_id = ? LIMIT ? OFFSET ?;');
 
-    const entries = [];
-    stmt.all(req.identity.id, accountId, limit, offset).forEach(row => {
-        entries.push(JSON.parse(row.data));
+    const objects = stmt.all(accountId, req.identity.id, limit, offset);
+    objects.forEach(obj => {
+        obj.value = JSON.parse(obj.value);
     });
-    res.json(entries);
+    res.json(objects);
 });
 app.get(/\/deltas\/.+\/head/, (req, res) => {
     const accountId = req.path.match(/\/deltas\/(.+)\/head/)[1];
