@@ -28,6 +28,7 @@ if(!fs.existsSync('./data')) {
 const db = sqlite3('./data/mailspring-api.db');
 db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR, timestamp INTEGER);')
 db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR, timestamp INTEGER);');
+db.exec('CREATE TABLE IF NOT EXISTS shared_activity(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, html VARCHAR, timestamp INTEGER);');
 
 let sessions = [];
 const identity = {
@@ -201,6 +202,18 @@ app.get(/\/link\/.+\/.+/, (req, res) => {
         }
     })();
 });
+app.get(/\/activity\/.+/, (req, res) => {
+    const key = req.path.match(/\/activity\/(.+)/)[1];
+
+    const stmt = db.prepare('SELECT html FROM shared_activity WHERE key = ?;');
+    const data = stmt.get(key);
+
+    if(data) {
+        res.send(data.html);
+    } else {
+        res.status(404).end('Invalid or expired link.');
+    }
+});
 
 // API
 app.post('/api/resolve-dav-hosts', async (req, res) => {
@@ -218,6 +231,24 @@ app.post('/api/feature_usage_event', (req, res) => {
 });
 app.get('/api/me', (req, res) => {
     res.json(identity);
+});
+app.post('/api/share-static-page', (req, res) => {
+    if(!req.body) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'No data provided'});
+        return;
+    }
+    if(!req.body.html) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "html" is required'});
+        return;
+    }
+
+    const key = crypto.randomBytes(30).toString('hex');
+    const baseUrl = process.env.SHARE_URL || 'http://localhost:5101';
+
+    const stmt = db.prepare('INSERT INTO shared_activity(identityId, key, html, timestamp) VALUES (?, ?, ?, ?);');
+    stmt.run(req.identity.id, key, req.body.html, Math.round(Date.now()/1000));
+
+    res.json({link: baseUrl+'/activity/'+key});
 });
 
 // Metadata
