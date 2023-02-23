@@ -26,7 +26,7 @@ if(!fs.existsSync('./data')) {
     fs.mkdirSync('./data');
 }
 const db = sqlite3('./data/mailspring-api.db');
-db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId VARCHAR, identityId VARCHAR, accountId VARCHAR);')
+db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR);')
 db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR);');
 
 let sessions = [];
@@ -195,6 +195,8 @@ app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
             object.value = req.body.value;
             stmt = db.prepare('UPDATE objects SET v = ?, value = ? WHERE object = \'metadata\' AND object_id = ? AND object_type = ? AND aid = ? AND plugin_id = ? AND identity_id = ?;');
             stmt.run(object.v, JSON.stringify(object.value), objectId, req.body.objectType, accountId, pluginId, req.identity.id);
+            
+            emitEvent('modify', req.identity.id, object);
             res.json(object);
         } else {
             res.status(409).json({statusCode: 409, error: 'Conflict', message: 'Version conflict'});
@@ -209,6 +211,8 @@ app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
             stmt = db.prepare('SELECT * FROM objects WHERE id = last_insert_rowid();');
             object = stmt.get();
             object.value = JSON.parse(object.value);
+            
+            emitEvent('create', req.identity.id, object)
             res.json(object);
         })();
     }
@@ -227,7 +231,7 @@ app.get(/\/metadata\/.+/, (req, res) => {
 });
 app.get(/\/deltas\/.+\/head/, (req, res) => {
     const accountId = req.path.match(/\/deltas\/(.+)\/head/)[1];
-    const stmt = db.prepare('SELECT MAX(cursor) AS cursor FROM metadata WHERE identityId = ? AND accountId = ?;');
+    const stmt = db.prepare('SELECT MAX(id) AS cursor FROM events WHERE identityId = ? AND accountId = ?;');
     const data = stmt.get(req.identity.id, accountId);
     res.json({cursor: data.cursor || 0});
 });
@@ -247,15 +251,18 @@ app.get(/\/deltas\/.+\/streaming/, (req, res) => {
     };
 
     res.writeHead(200);
-    const stmt = db.prepare('SELECT cursor, data FROM metadata WHERE identityId = ? AND accountId = ? AND cursor > ?');
-    stmt.all(session.identityId, session.accountId, session.cursor).forEach(row => {
-        const data = JSON.parse(row.data);
-        res.write(JSON.stringify({
-            object: 'metadata',
-            cursor: row.cursor.toString(),
-            attributes: data
-        })+'\n');
-    });
+    db.transaction(() => {
+        let stmt = db.prepare('SELECT * FROM events WHERE identityId = ? AND accountId = ? AND id > ?');
+        let events = stmt.all(session.identityId, session.accountId, session.cursor);
+        events.forEach(event => {
+            event.cursor = event.id.toString();
+            stmt = db.prepare('SELECT * FROM objects WHERE id = ?;');
+            event.attributes = stmt.get(event.objectId);
+            event.attributes.value = JSON.parse(event.attributes.value);
+
+            res.write(JSON.stringify(event)+'\n');
+        });
+    })();
 
     // Heartbeat
     const heartbeatIntervall = setInterval(() => {
@@ -284,3 +291,22 @@ app.get(/\/deltas\/.+\/streaming/, (req, res) => {
 app.listen(API_PORT, () => {
     logger.info(`Example app listening on port ${API_PORT}`)
 });
+
+function emitEvent(eventName, identityId, object) {
+    db.transaction(() => {
+        let stmt = db.prepare('INSERT INTO events(event, object, objectId, identityId, accountId) VALUES (?, ?, ?, ?, ?);');
+        stmt.run(eventName, object.object, object.id, identityId, object.aid);
+    
+        stmt = db.prepare('SELECT * FROM events WHERE id = last_insert_rowid();');
+        let event = stmt.get();
+        event.cursor = event.id.toString();
+        event.attributes = object;
+        event = JSON.stringify(event);
+
+        sessions.forEach(session => {
+            if(session.identityId == identityId && session.accountId == object.aid) {
+                session.send(event);
+            }
+        });
+    })();
+}
