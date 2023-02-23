@@ -139,23 +139,82 @@ app.get('/onboarding', (req, res) => {
 </html>`);
 });
 app.get(/\/open\/.+/, (req, res) => {
+    res.sendFile(path.resolve('./blank.gif'));
+
     const messageId = req.path.match(/\/open\/(.+)/)[1];
     const accountId = req.query.me;
     const recipient = Buffer.from(req.query.recipient, 'base64').toString();
-    console.log(messageId, accountId, recipient);
     
+    db.transaction(() => {
+        let stmt = db.prepare('SELECT * FROM objects WHERE object = \'metadata\' AND plugin_id = \'open-tracking\' AND aid = ? AND json_extract(value, \'$.uid\') = ?;');
+        let object = stmt.get(accountId, messageId);
+        
+        if(object) {
+            object.v++;
+            object.value = JSON.parse(object.value);
+            object.value.open_count++;
+            object.value.open_data.push({
+                timestamp: Date.now()/1000,
+                recipient: recipient
+            });
+    
+            stmt = db.prepare('UPDATE objects SET v = ?, value = ? WHERE id = ?;');
+            stmt.run(object.v, JSON.stringify(object.value), object.id);
+    
+            emitEvent('modify', object);
+        }
+    })();
+});
+app.get(/\/link\/.+\/.+/, (req, res) => {
+    const redirectUrl = req.query.redirect;
+    if(!redirectUrl) {
+        res.status(404).end("Expired or broken link.");
+        return;
+    }
+    res.redirect(redirectUrl);
 
-    res.sendFile(path.resolve('./blank.gif'));
+    const pathValues = req.path.match(/\/link\/(.+)\/(.+)/);
+    const messageId = pathValues[1];
+    const linkId = pathValues[2];
+    const recipient = Buffer.from(req.query.recipient, 'base64').toString();
+
+    db.transaction(() => {
+        let stmt = db.prepare('SELECT * FROM objects WHERE object = \'metadata\' AND plugin_id = \'link-tracking\' AND json_extract(value, \'$.uid\') = ?;');
+        let object = stmt.get(messageId);
+
+        if(object) {
+            object.v++;
+            object.value = JSON.parse(object.value);
+            const link = object.value.links[linkId];
+            if(link) {
+                link.click_count++;
+                link.click_data.push({
+                    timestamp: Date.now()/1000,
+                    recipient: recipient
+                });
+
+                stmt = db.prepare('UPDATE objects SET v = ?, value = ? WHERE id = ?;');
+                stmt.run(object.v, JSON.stringify(object.value), object.id);
+        
+                emitEvent('modify', object);
+            }
+        }
+    })();
 });
 
 // API
 app.post('/api/resolve-dav-hosts', async (req, res) => {
+    // Forward to Mailspring API
     try {
         const hosts = await axios.post('https://id.getmailspring.com/api/resolve-dav-hosts', req.body);
         res.json(hosts.data);
     } catch(err) {
         res.status(err.response.status).json(err.response.data);
     }
+});
+app.post('/api/feature_usage_event', (req, res) => {
+    // Don't do anything, unlimitted use of features
+    res.json({sucess: true})
 });
 app.get('/api/me', (req, res) => {
     res.json(identity);
@@ -196,7 +255,7 @@ app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
             stmt = db.prepare('UPDATE objects SET v = ?, value = ? WHERE object = \'metadata\' AND object_id = ? AND object_type = ? AND aid = ? AND plugin_id = ? AND identity_id = ?;');
             stmt.run(object.v, JSON.stringify(object.value), objectId, req.body.objectType, accountId, pluginId, req.identity.id);
             
-            emitEvent('modify', req.identity.id, object);
+            emitEvent('modify', object);
             res.json(object);
         } else {
             res.status(409).json({statusCode: 409, error: 'Conflict', message: 'Version conflict'});
@@ -212,7 +271,7 @@ app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
             object = stmt.get();
             object.value = JSON.parse(object.value);
             
-            emitEvent('create', req.identity.id, object)
+            emitEvent('create', object)
             res.json(object);
         })();
     }
@@ -292,10 +351,10 @@ app.listen(API_PORT, () => {
     logger.info(`Example app listening on port ${API_PORT}`)
 });
 
-function emitEvent(eventName, identityId, object) {
+function emitEvent(eventName, object) {
     db.transaction(() => {
         let stmt = db.prepare('INSERT INTO events(event, object, objectId, identityId, accountId) VALUES (?, ?, ?, ?, ?);');
-        stmt.run(eventName, object.object, object.id, identityId, object.aid);
+        stmt.run(eventName, object.object, object.id, object.identity_id, object.aid);
     
         stmt = db.prepare('SELECT * FROM events WHERE id = last_insert_rowid();');
         let event = stmt.get();
@@ -304,7 +363,7 @@ function emitEvent(eventName, identityId, object) {
         event = JSON.stringify(event);
 
         sessions.forEach(session => {
-            if(session.identityId == identityId && session.accountId == object.aid) {
+            if(session.identityId == object.identity_id && session.accountId == object.aid) {
                 session.send(event);
             }
         });
