@@ -9,7 +9,7 @@ const translate = require('@iamtraction/google-translate');
 const fs = require('fs');
 const path = require('path');
 
-const API_PORT = 5101;
+const API_PORT = process.env.API_PORT || 5101;
 
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',

@@ -19,12 +19,6 @@ Free reimplementation of the Mailspring Sync backend (and other required APIs). 
 - :heavy_check_mark: Translation (using Google Translate)
 - :x: Thread sharing
 
-## Environment variables
-| Variable | Description | Default |
-|----------|-------------|---------|
-| LOG_LEVEL | Set custom log level. [Available log levels](https://github.com/winstonjs/winston#logging-levels). | `info` |
-| SHARE_URL | External url for shared resources. (Should be on a different domain for securrity purposes.) | `http://localhost:5101` |
-
 ## Install
 ### Using Docker Compose
 docker-compose.yml
@@ -64,6 +58,13 @@ npm install
 ./manage.js user add --fullName "..." --email "..." --password "..."
 npm start
 ```
+
+## Environment variables
+| Variable | Description | Default |
+|----------|-------------|---------|
+| LOG_LEVEL | Set custom log level. [Available log levels](https://github.com/winstonjs/winston#logging-levels). | `info` |
+| SHARE_URL | External url for shared resources. (Should be on a different domain for securrity purposes.) | `http://localhost:5101` |
+| API_PORT | The port that is used for the webinterface and the API. | 5101 |
 
 ## Create/Manage a user account
 You can create a new user account using the CLI tool.
