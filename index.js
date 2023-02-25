@@ -39,7 +39,7 @@ cleanup();
 
 let sessions = [];
 
-app.use(express.json());
+app.use(express.json({strict: false}));
 app.use(cookieParser());
 app.use((req, res, next) => {
     logger.debug(`${req.method} ${req.path}`);
