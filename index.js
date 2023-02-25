@@ -458,3 +458,7 @@ function cleanup() {
     let result = stmt.run(Date.now()/1000 - 2629800);
     logger.info(`Deleted ${result.changes} sessions`);
 }
+
+process.on('SIGINT', () => {
+    process.exit();
+});

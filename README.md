@@ -25,14 +25,53 @@ Free reimplementation of the Mailspring Sync backend (and other required APIs). 
 | LOG_LEVEL | Set custom log level. [Available log levels](https://github.com/winstonjs/winston#logging-levels). | `info` |
 | SHARE_URL | External url for shared resources. (Should be on a different domain for securrity purposes.) | `http://localhost:5101` |
 
+## Install
+### Using Docker Compose
+docker-compose.yml
+```yaml
+version: "3.4"
+
+services:
+  mailspring-api:
+    container_name: mailspring-api
+    image: ghcr.io/1randomdev/mailspring-api:latest
+    network_mode: bridge
+    ports:
+      - 5101/5101/tcp
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=<timezone>
+      - SHARE_URL=https://<my_public_domain>
+    restart: unless-stopped
+```
+### Using Docker CLI
+```bash
+docker run -d --name=mailspring-api \
+    --network=bridge \
+    -p 5101/5101/tcp \
+    -v <data_directory>:/data \
+    -e TZ=<timezone> \
+    -e SHARE_URL=https://<my_public_domain> \
+    ghcr.io/1randomdev/mailspring-api:latest
+```
+
+### Install on the host
+```bash
+git clone https://github.com/1RandomDev/mailspring-api.git && cd mailspring-api
+npm install
+
+npm start
+```
+
 ## Create/Manage a user account
 You can create a new user account using the CLI tool.
 ```bash
-node manage.js user add --fullName "..." --email "..." --password "..."
+manage.js user add --fullName "..." --email "..." --password "..."
 ```
 For more info use
 ```bash
-$ node manage.js user --help
+$ manage.js user --help
 manage.js user <operation> [options]
 
 Magage user accounts.

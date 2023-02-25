@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 const readline = require("readline-sync");
@@ -260,3 +262,7 @@ function hashPassword(password) {
     const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
     return hash+'.'+salt;
 }
+
+process.on('SIGINT', () => {
+    process.exit();
+});
