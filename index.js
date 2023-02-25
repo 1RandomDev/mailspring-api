@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const axios = require('axios');
 const winston = require('winston');
 const crypto = require('crypto');
@@ -26,76 +27,19 @@ if(!fs.existsSync('./data')) {
     fs.mkdirSync('./data');
 }
 const db = sqlite3('./data/mailspring-api.db');
-db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR, timestamp INTEGER);')
-db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR, timestamp INTEGER);');
-db.exec('CREATE TABLE IF NOT EXISTS shared_activity(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, html VARCHAR, timestamp INTEGER);');
+db.transaction(() => {
+    db.exec('CREATE TABLE IF NOT EXISTS identities(id VARCHAR PRIMARY KEY, firstName VARCHAR, lastName VARCHAR, emailAddress VARCHAR, passwordHash VARCHAR, createdAt VARCHAR, stripePlan VARCHAR, stripePlanEffective VARCHAR, stripeCustomerId VARCHAR, stripePeriodEnd VARCHAR, featureUsage VARCHAR);');
+    db.exec('CREATE TABLE IF NOT EXISTS sessions(token VARCHAR PRIMARY KEY, identityId VARCHAR, lastLogin INTEGER);');
+    db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR, timestamp INTEGER);')
+    db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR, timestamp INTEGER);');
+    db.exec('CREATE TABLE IF NOT EXISTS shared_activity(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, html VARCHAR, timestamp INTEGER);');
+})();
+cleanup();
 
 let sessions = [];
-const identity = {
-    id: '5237197a-8ae3-4462-aba7-7249d678bd9b',
-    token: '5237197a-8ae3-4462-aba7-7249d678bd9b',
-    firstName: 'Custom',
-    lastName: 'Server',
-    emailAddress: 'customserver@example.com',
-    object: 'identity',
-    createdAt: '2023-01-01T12:00:00.000Z',
-    stripePlan: 'Pro',
-    stripePlanEffective: 'Pro',
-    stripeCustomerId: '',
-    stripePeriodEnd: '2023-01-01T12:00:00.000Z',
-    featureUsage: {
-        snooze: {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        },
-        'send-later': {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        },
-        'thread-sharing': {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        },
-        'link-tracking': {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        },
-        'open-tracking': {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        },
-        'contact-profiles': {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        },
-        'send-reminders': {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        },
-        translation: {
-            quota: 1000,
-            period: 'weekly',
-            usedInPeriod: 0,
-            featureLimitName: 'pro-limit'
-        }
-    }
-};
 
 app.use(express.json());
+app.use(cookieParser());
 app.use((req, res, next) => {
     logger.debug(`${req.method} ${req.path}`);
     next();
@@ -108,39 +52,32 @@ app.use((req, res, next) => {
             return;
         }
 
-        const authheader = req.headers.authorization;
-        if(authheader) {
-            const auth = authheader.split(' ')[1];
-            const token = Buffer.from(auth, 'base64').toString();
-            // TODO: Implement propper authentication with database
-            if(token.slice(0, -1) === identity.token) {
+        if(req.headers.authorization) {
+            const auth = req.headers.authorization.split(' ')[1];
+            const token = Buffer.from(auth, 'base64').toString().slice(0, -1);
+
+            // Check token
+            const identity = verifySession(token);
+            if(identity) {
                 req.identity = identity;
                 next();
             } else {
-                res.status(401).json({statusCode: 401, error: 'Unauthorized', message: 'Invalid token'});
+                res.status(401).header('WWW-Authenticate', 'Basic').json({statusCode: 401, error: 'Unauthorized', message: 'Invalid token'});
             }
         } else {
-            res.status(401).json({statusCode: 401, error: 'Unauthorized', message: 'Missing authentication'});
+            res.status(401).header('WWW-Authenticate', 'Basic').json({statusCode: 401, error: 'Unauthorized', message: 'Missing authentication'});
         }
     } else {
         next();
     }
 });
 
+// Public
 app.get('/', (req, res) => {
-    res.end();
-});
-app.get('/onboarding', (req, res) => {
-    const identityEncoded = Buffer.from(JSON.stringify(identity)).toString('base64');
-    res.send(`<!DOCTYPE html>
-<html>
-    <body>
-        <div id="identity-result" style="display:none;">${identityEncoded}</div>
-    </body>
-</html>`);
+    res.sendFile(path.resolve('./static/index.html'));
 });
 app.get(/\/open\/.+/, (req, res) => {
-    res.sendFile(path.resolve('./blank.gif'));
+    res.sendFile(path.resolve('./static/blank.gif'));
 
     const messageId = req.path.match(/\/open\/(.+)/)[1];
     const accountId = req.query.me;
@@ -215,6 +152,44 @@ app.get(/\/activity\/.+/, (req, res) => {
     }
 });
 
+// Accout related
+app.get('/dashboard', (req, res) => {
+    res.redirect('/');
+});
+app.get('/onboarding', (req, res) => {
+    const identity = verifySession(req.cookies.session);
+    if(identity) {
+        const identityEncoded = Buffer.from(JSON.stringify(identity)).toString('base64');
+        res.render(path.resolve('./static/onboarding.ejs'), {identityEncoded: identityEncoded});
+    } else {
+        res.sendFile(path.resolve('./static/login.html'));
+    }
+});
+app.post('/login', (req, res) => {
+    if(!req.body) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'No data provided'});
+        return;
+    }
+    if(!req.body.emailAddress) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "emailAddress" is required'});
+        return;
+    }
+    if(!req.body.password) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "password" is required'});
+        return;
+    }
+
+    const identity = loginUser(req.body.emailAddress, req.body.password);
+    if(identity.error) {
+        res.status(identity.statusCode);
+    } else {
+        res.cookie('session', identity.token, {
+            secure: true
+        });
+    }
+    res.json(identity);
+});
+
 // API
 app.post('/api/resolve-dav-hosts', async (req, res) => {
     // Forward to Mailspring API
@@ -230,7 +205,12 @@ app.post('/api/feature_usage_event', (req, res) => {
     res.json({sucess: true})
 });
 app.get('/api/me', (req, res) => {
-    res.json(identity);
+    // Mark session as still active
+    const stmt = db.prepare('UPDATE sessions SET lastLogin = ? WHERE token = ?;');
+    stmt.run(Math.round(Date.now()/1000), req.identity.token);
+
+    delete req.identity.token;
+    res.json(req.identity);
 });
 app.post('/api/share-static-page', (req, res) => {
     if(!req.body) {
@@ -401,4 +381,58 @@ function emitEvent(eventName, object) {
             }
         });
     })();
+}
+
+function fetchIdentity(identityId) {
+    const stmt = db.prepare('SELECT * FROM identities WHERE id = ?;');
+    return stmt.get(identityId);
+}
+function loginUser(email, password) {
+    const stmt = db.prepare('SELECT * FROM identities WHERE emailAddress = ?;');
+    const identity = stmt.get(email);
+
+    if(identity) {
+        const pwHashSplit = identity.passwordHash.split('.');
+        const pwSalt = pwHashSplit[1];
+        const correctPwHash = pwHashSplit[0];
+        const currentPwHash = crypto.pbkdf2Sync(password, pwSalt, 1000, 64, `sha512`).toString(`hex`);
+
+        if(currentPwHash === correctPwHash) {
+            delete identity.passwordHash;
+            identity.token = createSession(identity.id);
+            identity.featureUsage = JSON.parse(identity.featureUsage);
+            return identity;
+        } else {
+            return {statusCode: 401, error: 'Unauthorized', message: 'Invalid email address or password.'};
+        }
+    } else {
+        return{statusCode: 401, error: 'Unauthorized', message: 'Invalid email address or password.'};
+    }
+}
+function createSession(identityId) {
+    const token = crypto.randomUUID();
+    const stmt = db.prepare('INSERT INTO sessions(token, identityId, lastLogin) VALUES (?, ?, ?);');
+    stmt.run(token, identityId, Math.round(Date.now()/1000));
+    return token;
+}
+function verifySession(token) {
+    if(!token) return false;
+
+    const stmt = db.prepare('SELECT * FROM sessions WHERE token = ?;');
+    const session = stmt.get(token);
+    if(session && session.lastLogin > Date.now()/1000 - 2629800) { // Expired after 1 month of inactivity
+        const identity = fetchIdentity(session.identityId);
+        delete identity.passwordHash;
+        identity.token = token;
+        identity.featureUsage = JSON.parse(identity.featureUsage);
+        return identity;
+    }
+    return false;
+}
+
+function cleanup() {
+    logger.info('Deleting expired sessions...');
+    let stmt = db.prepare('DELETE FROM sessions WHERE lastLogin < ?;');
+    let result = stmt.run(Date.now()/1000 - 2629800);
+    logger.info(`Deleted ${result.changes} sessions`);
 }

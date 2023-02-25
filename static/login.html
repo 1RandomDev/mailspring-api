@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mailspring API Login</title>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        a {
+            color: #3897fc;
+        }
+        .loginContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 1px solid #dddddd;
+            border-radius: 5px;
+            box-shadow: 0 7px 14px 0 rgba(49, 49, 93, 0.1), 0 3px 6px 0 rgba(0, 0, 0, 0.08);
+            padding: 30px;
+            justify-content: center;
+        }
+        .loginContainer > * {
+            margin: 0 auto;
+            text-align: center;
+        }
+        .loginContainer .title {
+            font-weight: 550;
+            margin-bottom: 35px;
+            font-size: 26px;
+        }
+        .loginContainer .info {
+            font-size: 14px;
+            color: #525252;
+        }
+        .loginContainer #loginMessage {
+            width: 300px;
+            padding: 8px;
+            margin-bottom: 16px;
+            background-color: #fff1f0;
+            border: 1px solid #e4584c;
+            border-radius: 5px;
+            color: #e4584c;
+        }
+        .loginContainer #loginMessage:empty {
+            display: none;
+        }
+
+        #loginForm > * {
+            display: block;
+            margin: 0 auto 16px auto;
+        }
+        #loginForm input {
+            outline: none;
+            border: none;
+            border-bottom: 2px solid #4d494b;
+            font-size: 16px;
+            width: 300px;
+            height: 35px;
+            background-color: #f1f1f1;
+            border-top-right-radius: 5px;
+            border-top-left-radius: 5px;
+            padding: 4px 8px;
+            transition: 0.3s;
+        }
+        #loginForm input:focus {
+            border-color: #419bf9;
+            background-color: #dfdfdf;
+        }
+        #loginForm button {
+            width: 316px;
+            height: 40px;
+            font-size: 16px;
+            color: white;
+            background-color: #3897fc;
+            border: none;
+            border-radius: 5px;
+            margin-top: 26px;
+            cursor: pointer;
+        }
+        #loginForm button:disabled {
+            background-color: #58a9ff;
+            cursor: auto;
+        }
+        #loginForm button:hover:enabled {
+            background-color: #238cfc;
+        }
+        #loginForm button:active:enabled {
+            background-color: #1f76d4 !important;
+        }
+
+        .github-link {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loginContainer">
+        <div class="title">Sign in to your selfhosted Mailspring ID</div>
+        <div id="loginMessage"></div>
+        <form id="loginForm">
+            <input name="email" placeholder="E-Mail" required type="email">
+            <input name="password" placeholder="Password" required type="password">
+            <button name="submit" type="submit" disabled>Login</button>
+        </form>
+        <div class="info"><b>This project is not affiliated with Mailspring.</b><br>More users can be added via the CLI.<br>For mre info check out the <a href="">Documentation</a>.</div>
+    </div>
+    <a class="github-link" href="https://github.com/1RandomDev/mailspring-api" target="_blank">GitHub</a>
+
+    <script>
+        const loginMessage = document.getElementById('loginMessage');
+        const loginForm = document.getElementById('loginForm');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = new FormData(e.target);
+            
+            try {
+                let res = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=UTF-8'
+                    },
+                    body: JSON.stringify({
+                        emailAddress: data.get('email'),
+                        password: data.get('password')
+                    })
+                });
+    
+                if(res.status != 401 && res.status != 200) {
+                    loginForm.querySelector('input[type=password]').value = '';
+                    loginMessage.innerText = 'An unknown error occurred.';
+                    return;
+                }
+    
+                res = await res.json();
+                if(res.error) {
+                    loginForm.querySelector('input[type=password]').value = '';
+                    loginMessage.innerText = res.message;
+                    return;
+                }
+    
+                location.reload();
+            } catch(e) {
+                loginForm.querySelector('input[type=password]').value = '';
+                loginMessage.innerText = 'An unknown error occurred.';
+            }
+
+            loginForm.elements['submit'].disabled = !loginForm.checkValidity();
+        });
+        loginForm.addEventListener('keyup', (e) => {
+            loginForm.elements['submit'].disabled = !loginForm.checkValidity();
+        });
+    </script>
+</body>
+</html>
