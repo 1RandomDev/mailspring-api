@@ -184,9 +184,7 @@ app.post('/login', (req, res) => {
     if(identity.error) {
         res.status(identity.statusCode);
     } else {
-        res.cookie('session', identity.token, {
-            secure: true
-        });
+        res.cookie('session', identity.token);
     }
     res.json(identity);
 });
@@ -283,11 +281,15 @@ app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
     if(object) {
         // Update
         if(req.body.version >= object.v) {
+            const previousValue = object.value;
             object.v++;
             object.value = req.body.value;
+            const newValue = JSON.stringify(object.value);
+
             stmt = db.prepare('UPDATE objects SET v = ?, value = ? WHERE object = \'metadata\' AND object_id = ? AND object_type = ? AND aid = ? AND plugin_id = ? AND identity_id = ?;');
-            stmt.run(object.v, JSON.stringify(object.value), objectId, req.body.objectType, accountId, pluginId, req.identity.id);
+            stmt.run(object.v, newValue, objectId, req.body.objectType, accountId, pluginId, req.identity.id);
             
+            logger.debug(`Updated object ${objectId} (v${object.v}) from ${previousValue} to ${newValue}`);
             emitEvent('modify', object);
             res.json(object);
         } else {
@@ -302,8 +304,9 @@ app.post(/\/metadata\/.+\/.+\/.+/, (req, res) => {
             
             stmt = db.prepare('SELECT * FROM objects WHERE id = last_insert_rowid();');
             object = stmt.get();
-            object.value = JSON.parse(object.value);
+            logger.debug(`Created object ${objectId} with value ${object.value}`);
             
+            object.value = JSON.parse(object.value);
             emitEvent('create', object)
             res.json(object);
         })();
@@ -423,12 +426,15 @@ function loginUser(email, password) {
             delete identity.passwordHash;
             identity.token = createSession(identity.id);
             identity.featureUsage = JSON.parse(identity.featureUsage);
+            logger.info(`User "${identity.firstName} ${identity.lastName}" sucessfully logged in.`);
             return identity;
         } else {
+            logger.warn(`Login attempt for user "${identity.firstName} ${identity.lastName}" failed: Incorrect password.`);
             return {statusCode: 401, error: 'Unauthorized', message: 'Invalid email address or password.'};
         }
     } else {
-        return{statusCode: 401, error: 'Unauthorized', message: 'Invalid email address or password.'};
+        logger.warn(`Login attempt with email "${email}" failed: User not found.`)
+        return {statusCode: 401, error: 'Unauthorized', message: 'Invalid email address or password.'};
     }
 }
 function createSession(identityId) {
