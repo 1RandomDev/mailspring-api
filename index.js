@@ -5,6 +5,7 @@ const axios = require('axios');
 const winston = require('winston');
 const crypto = require('crypto');
 const sqlite3 = require('better-sqlite3');
+const translate = require('@iamtraction/google-translate');
 const fs = require('fs');
 const path = require('path');
 
@@ -229,6 +230,27 @@ app.post('/api/share-static-page', (req, res) => {
     stmt.run(req.identity.id, key, req.body.html, Math.round(Date.now()/1000));
 
     res.json({link: baseUrl+'/activity/'+key});
+});
+app.post('/api/translate', async (req, res) => {
+    if(!req.body) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'No data provided'});
+        return;
+    }
+    if(!req.body.lang) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "lang" is required'});
+        return;
+    }
+    if(!req.body.text) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "text" is required'});
+        return;
+    }
+
+    if(req.body.lang == 'zh') req.body.lang = 'zh-cn';
+    const paragraphs = Array.from(req.body.text.matchAll(/<b>(.+?)<\/b>/g)).map(p => p[1]);
+    const result = await translate(paragraphs.join('\n'), { to: req.body.lang });
+    
+    const translations = result.text.split('\n').map(p => '<b>'+p+'</b>');
+    res.json({result: translations.join('')});
 });
 
 // Metadata

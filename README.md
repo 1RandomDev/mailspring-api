@@ -16,7 +16,7 @@ Free reimplementation of the Mailspring Sync backend (and other required APIs). 
 - :x: Rich contact profile
 - :x: Company overviews
 - :heavy_check_mark: Mailbox insights + sharing
-- :x: Translation
+- :heavy_check_mark: Translation (using Google Translate)
 - :x: Thread sharing
 
 ## Environment variables
