@@ -61,17 +61,18 @@ docker run -d --name=mailspring-api \
 git clone https://github.com/1RandomDev/mailspring-api.git && cd mailspring-api
 npm install
 
+./manage.js user add --fullName "..." --email "..." --password "..."
 npm start
 ```
 
 ## Create/Manage a user account
 You can create a new user account using the CLI tool.
 ```bash
-manage.js user add --fullName "..." --email "..." --password "..."
+docker exec -it mailspring-api ./manage.js user add --fullName "..." --email "..." --password "..."
 ```
 For more info use
 ```bash
-$ manage.js user --help
+$ docker exec -it mailspring-api ./manage.js user --help
 manage.js user <operation> [options]
 
 Magage user accounts.
