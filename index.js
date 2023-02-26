@@ -367,6 +367,7 @@ app.get(/\/deltas\/.+\/streaming/, (req, res) => {
     // Close after 15min
     const sessionTimeout = setTimeout(() => {
         clearInterval(heartbeatIntervall);
+        res.off('close', session.close);
         res.end();
         sessions = sessions.filter(s => s != session);
         logger.debug('Stream closed after 15min: '+JSON.stringify(session));
@@ -381,7 +382,7 @@ app.get(/\/deltas\/.+\/streaming/, (req, res) => {
     }
     sessions.push(session);
 
-    res.on('close', () => session.close());
+    res.on('close', session.close);
     logger.debug('Stream initialized: '+JSON.stringify(session));
 });
 
