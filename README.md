@@ -31,7 +31,7 @@ services:
     image: ghcr.io/1randomdev/mailspring-api:latest
     network_mode: bridge
     ports:
-      - 5101/5101/tcp
+      - 5101:5101/tcp
     volumes:
       - ./data:/data
     environment:
@@ -43,7 +43,7 @@ services:
 ```bash
 docker run -d --name=mailspring-api \
     --network=bridge \
-    -p 5101/5101/tcp \
+    -p 5101:5101/tcp \
     -v <data_directory>:/data \
     -e TZ=<timezone> \
     -e SHARE_URL=https://<my_public_domain> \
