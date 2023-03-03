@@ -245,10 +245,15 @@ app.post('/api/translate', async (req, res) => {
 
     if(req.body.lang == 'zh') req.body.lang = 'zh-cn';
     const paragraphs = Array.from(req.body.text.matchAll(/<b>(.+?)<\/b>/g)).map(p => p[1]);
-    const result = await translate(paragraphs.join('\n'), { to: req.body.lang });
-    
-    const translations = result.text.split('\n').map(p => '<b>'+p+'</b>');
-    res.json({result: translations.join('')});
+    try {
+        const result = await translate(paragraphs.join('\n'), { to: req.body.lang });
+        
+        const translations = result.text.split('\n').map(p => '<b>'+p+'</b>');
+        res.json({result: translations.join('')});
+    } catch(err) {
+        this.logger.error('Message translation failed: '+err);
+        res.status(500).json({statusCode: 400, error: 'Internal Server Error', message: 'Translation service returned an unexpected error.'});
+    }
 });
 
 // Metadata
