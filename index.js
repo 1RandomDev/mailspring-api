@@ -251,7 +251,7 @@ app.post('/api/translate', async (req, res) => {
         const translations = result.text.split('\n').map(p => '<b>'+p+'</b>');
         res.json({result: translations.join('')});
     } catch(err) {
-        this.logger.error('Message translation failed: '+err);
+        logger.error('Message translation failed: '+err);
         res.status(500).json({statusCode: 400, error: 'Internal Server Error', message: 'Translation service returned an unexpected error.'});
     }
 });
