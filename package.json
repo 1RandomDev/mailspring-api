@@ -1,6 +1,6 @@
 {
   "name": "mailspring-api",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Free reimplementation of the Mailspring Sync backend (and other required APIs).",
   "main": "index.js",
   "scripts": {
