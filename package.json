@@ -1,14 +1,14 @@
 {
   "name": "mailspring-api",
-  "version": "1.0.0",
-  "description": "",
+  "version": "1.0.1",
+  "description": "Free reimplementation of the Mailspring Sync backend (and other required APIs).",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "1RandomDev",
+  "license": "GPL-3.0",
   "dependencies": {
     "@iamtraction/google-translate": "^2.0.1",
     "axios": "^1.3.3",
