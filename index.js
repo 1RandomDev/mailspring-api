@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
 const axios = require('axios');
 const winston = require('winston');
 const crypto = require('crypto');
@@ -23,6 +24,7 @@ const logger = winston.createLogger({
     ]
 });
 const app = express();
+const upload = multer();
 
 if(!fs.existsSync('./data')) {
     fs.mkdirSync('./data');
@@ -33,7 +35,8 @@ db.transaction(() => {
     db.exec('CREATE TABLE IF NOT EXISTS sessions(token VARCHAR PRIMARY KEY, identityId VARCHAR, lastLogin INTEGER);');
     db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR, timestamp INTEGER);')
     db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR, timestamp INTEGER);');
-    db.exec('CREATE TABLE IF NOT EXISTS shared_activity(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, html VARCHAR, timestamp INTEGER);');
+    db.exec('CREATE TABLE IF NOT EXISTS shared_pages(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, html VARCHAR, timestamp INTEGER);');
+    db.exec('CREATE TABLE IF NOT EXISTS shared_assets(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, filename VARCHAR, filetype VARCHAR, file BLOB, timestamp INTEGER);');
 })();
 cleanup();
 
@@ -140,14 +143,27 @@ app.get(/\/link\/.+\/.+/, (req, res) => {
         }
     })();
 });
-app.get(/\/activity\/.+/, (req, res) => {
-    const key = req.path.match(/\/activity\/(.+)/)[1];
+app.get(/\/page\/[0-9a-z]+/i, (req, res) => {
+    const key = req.path.match(/\/page\/([0-9a-z]+)/i)[1];
 
-    const stmt = db.prepare('SELECT html FROM shared_activity WHERE key = ?;');
+    const stmt = db.prepare('SELECT html FROM shared_pages WHERE key = ?;');
     const data = stmt.get(key);
 
     if(data) {
         res.send(data.html);
+    } else {
+        res.status(404).end('Invalid or expired link.');
+    }
+});
+app.get(/\/asset\/[0-9a-z]+/i, (req, res) => {
+    const key = req.path.match(/\/asset\/([0-9a-z]+)(?:\.[0-9a-z]+)?$/i)[1];
+
+    const stmt = db.prepare('SELECT file, filetype FROM shared_assets WHERE key = ?;');
+    const data = stmt.get(key);
+
+    if(data) {
+        res.setHeader('Content-Type', data.filetype);
+        res.send(data.file);
     } else {
         res.status(404).end('Invalid or expired link.');
     }
@@ -224,10 +240,55 @@ app.post('/api/share-static-page', (req, res) => {
     const key = crypto.randomBytes(30).toString('hex');
     const baseUrl = process.env.SHARE_URL || 'http://localhost:5101';
 
-    const stmt = db.prepare('INSERT INTO shared_activity(identityId, key, html, timestamp) VALUES (?, ?, ?, ?);');
+    const stmt = db.prepare('INSERT INTO shared_pages(identityId, key, html, timestamp) VALUES (?, ?, ?, ?);');
     stmt.run(req.identity.id, key, req.body.html, Math.round(Date.now()/1000));
 
-    res.json({link: baseUrl+'/activity/'+key});
+    res.json({link: baseUrl+'/page/'+key});
+});
+app.post('/api/save-public-asset', upload.single('file'), (req, res) => {
+    if(!req.body) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'No data provided'});
+        return;
+    }
+    if(!req.body.filename) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "filename" is required'});
+        return;
+    }
+    if(!req.body.file && !req.file) {
+        res.status(400).json({statusCode: 400, error: 'Bad Request', message: 'Key "file" is required'});
+        return;
+    }
+
+    let blob, type;
+    if(req.file) {
+        blob = req.file.buffer;
+        type = req.file.mimetype;
+    } else {
+        blob = req.body.file;
+        type = 'text/plain';
+    }
+
+    db.transaction(() => {
+        let stmt = db.prepare('SELECT * FROM shared_assets WHERE identityId = ? AND filename = ?;');
+        let asset = stmt.get(req.identity.id, req.body.filename);
+        const baseUrl = process.env.SHARE_URL || 'http://localhost:5101';
+
+        if(asset) {
+            // Update existing
+            stmt = db.prepare('UPDATE shared_assets SET file = ?, filetype = ? WHERE id = ?;');
+            stmt.run(blob, type, asset.id);
+
+            res.json({link: baseUrl+'/asset/'+asset.key+path.extname(asset.filename)});
+        } else {
+            // Create new
+            const key = crypto.randomBytes(30).toString('hex');
+
+            stmt = db.prepare('INSERT INTO shared_assets(identityId, key, filename, filetype, file, timestamp) VALUES (?, ?, ?, ?, ?, ?);');
+            stmt.run(req.identity.id, key, req.body.filename, type, blob, Math.round(Date.now()/1000));
+
+            res.json({link: baseUrl+'/asset/'+key+path.extname(req.body.filename)});
+        }
+    })();
 });
 app.post('/api/translate', async (req, res) => {
     if(!req.body) {
@@ -252,7 +313,7 @@ app.post('/api/translate', async (req, res) => {
         res.json({result: translations.join('')});
     } catch(err) {
         logger.error('Message translation failed: '+err);
-        res.status(500).json({statusCode: 400, error: 'Internal Server Error', message: 'Translation service returned an unexpected error.'});
+        res.status(500).json({statusCode: 500, error: 'Internal Server Error', message: 'Translation service returned an unexpected error.'});
     }
 });
 

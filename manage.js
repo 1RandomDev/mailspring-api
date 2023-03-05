@@ -63,7 +63,8 @@ db.transaction(() => {
     db.exec('CREATE TABLE IF NOT EXISTS sessions(token VARCHAR PRIMARY KEY, identityId VARCHAR, lastLogin INTEGER);');
     db.exec('CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, event VARCHAR, object VARCHAR, objectId INTEGER, identityId VARCHAR, accountId VARCHAR, timestamp INTEGER);')
     db.exec('CREATE TABLE IF NOT EXISTS objects(id INTEGER PRIMARY KEY AUTOINCREMENT, object_id VARCHAR, object VARCHAR, object_type VARCHAR, aid VARCHAR, identity_id VARCHAR, plugin_id VARCHAR, v INTEGER, value VARCHAR, timestamp INTEGER);');
-    db.exec('CREATE TABLE IF NOT EXISTS shared_activity(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, html VARCHAR, timestamp INTEGER);');
+    db.exec('CREATE TABLE IF NOT EXISTS shared_pages(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, html VARCHAR, timestamp INTEGER);');
+    db.exec('CREATE TABLE IF NOT EXISTS shared_assets(id INTEGER PRIMARY KEY AUTOINCREMENT, identityId VARCHAR, key VARCHAR, filename VARCHAR, filetype VARCHAR, file BLOB, timestamp INTEGER);');
 })();
 
 switch(argv._[0]) {
@@ -178,6 +179,12 @@ function manageUsers() {
                 stmt.run(identity.id);
 
                 stmt = db.prepare('DELETE FROM events WHERE identityId = ?;');
+                stmt.run(identity.id);
+
+                stmt = db.prepare('DELETE FROM shared_pages WHERE identityId = ?;');
+                stmt.run(identity.id);
+
+                stmt = db.prepare('DELETE FROM shares_assets WHERE identityId = ?;');
                 stmt.run(identity.id);
 
                 stmt = db.prepare('DELETE FROM sessions WHERE identityId = ?;');

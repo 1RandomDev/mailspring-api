@@ -2,7 +2,7 @@
 
 Free reimplementation of the Mailspring Sync backend (and other required APIs). This project aims to provide an alternative sync server that can be self hosted for the [Mailspring Email Client](https://getmailspring.com/).
 
-**🔴IMPORTANT:🔴** Currently this project can only be used with [my fork of the MailSpring Client](https://github.com/1RandomDev/Mailspring) since the official version doesn't allow changing the API URL.
+**🔴IMPORTANT🔴** Currently this project can only be used with [my fork of the MailSpring Client](https://github.com/1RandomDev/Mailspring) since the official version doesn't allow changing the API URL.
 
 ## Supported Features
 - :heavy_check_mark: Metadata Sync
@@ -15,9 +15,9 @@ Free reimplementation of the Mailspring Sync backend (and other required APIs). 
 - :heavy_check_mark: Mail Templates
 - :x: Rich contact profile
 - :x: Company overviews
-- :heavy_check_mark: Mailbox insights + sharing
+- :heavy_check_mark: Mailbox insights (+ sharing)
 - :heavy_check_mark: Translation (using Google Translate)
-- :x: Thread sharing
+- :x: Thread sharing (web viewer not implemented yet)
 
 ## Install
 ### Using Docker Compose
