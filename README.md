@@ -2,7 +2,7 @@
 
 Free reimplementation of the Mailspring Sync backend (and other required APIs). This project aims to provide an alternative sync server that can be self hosted for the [Mailspring Email Client](https://getmailspring.com/).
 
-**Note:** This project is in an early state of development and will probably still contain a lot of bugs.
+**🔴IMPORTANT:🔴** Currently this project can only be used with [my fork of the MailSpring Client](https://github.com/1RandomDev/Mailspring) since the official version doesn't allow changing the API URL.
 
 ## Supported Features
 - :heavy_check_mark: Metadata Sync
