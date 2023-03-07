@@ -168,6 +168,29 @@ app.get(/\/asset\/[0-9a-z]+/i, (req, res) => {
         res.status(404).end('Invalid or expired link.');
     }
 });
+app.get(/\/thread\/.*\/.*/, (req, res) => {
+    const pathValues = req.path.match(/\/thread\/(.*)\/(.*)/);
+    const identityId = pathValues[1];
+    const key = pathValues[2];
+
+    const stmt = db.prepare('SELECT file FROM shared_assets WHERE identityId = ? AND filename = ?;');
+    const asset = stmt.get(identityId, key);
+
+    if(asset) {
+        try {
+            const thread = JSON.parse(asset.file);
+            if(thread.shared != false) {
+                res.render(path.resolve('./static/thread-sharing.ejs'), {data: thread, title: 'test'});
+            } else {
+                res.status(404).end('Invalid or expired link. Has the person stopped sharing this thread?');
+            }
+        } catch(e) {
+            res.status(404).end('Invalid or expired link. Has the person stopped sharing this thread?');
+        }
+    } else {
+        res.status(404).end('Invalid or expired link. Has the person stopped sharing this thread?');
+    }
+});
 
 // Accout related
 app.get('/dashboard', (req, res) => {

@@ -17,7 +17,7 @@ Free reimplementation of the Mailspring Sync backend (and other required APIs). 
 - :x: Company overviews
 - :heavy_check_mark: Mailbox insights (+ sharing)
 - :heavy_check_mark: Translation (using Google Translate)
-- :x: Thread sharing (web viewer not implemented yet)
+- :heavy_check_mark: Thread sharing
 
 ## Install
 ### Using Docker Compose

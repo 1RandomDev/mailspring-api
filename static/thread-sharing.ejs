@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang='en'>  
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <title><%= data.thread.subject %></title>
+    <link href="https://shared.getmailspring.com/static/thread-sharing/build/static/css/main.46331d9a.css" rel="stylesheet">
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to view this shared thread.</noscript>
+    <div id="root"></div>
+    <script>
+        window.data = <%- JSON.stringify(data) %>;
+    </script>
+    <script src="https://shared.getmailspring.com/static/thread-sharing/build/static/js/main.cca374f6.js"></script>
+  </body>
+</html>
