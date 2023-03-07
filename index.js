@@ -1,15 +1,17 @@
-require('dotenv').config();
-const express = require('express');
-const cookieParser = require('cookie-parser');
-const multer = require('multer');
-const axios = require('axios');
-const winston = require('winston');
-const crypto = require('crypto');
-const sqlite3 = require('better-sqlite3');
-const translate = require('@iamtraction/google-translate');
-const fs = require('fs');
-const path = require('path');
+import * as dotenv from 'dotenv';
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import multer from 'multer';
+import axios from 'axios';
+import winston from 'winston';
+import crypto from 'crypto';
+import cryptoRandomString from 'crypto-random-string';
+import Database from 'better-sqlite3';
+import translate from '@iamtraction/google-translate';
+import fs from 'fs';
+import path from 'path';
 
+dotenv.config();
 const API_PORT = process.env.API_PORT || 5101;
 
 const logger = winston.createLogger({
@@ -29,7 +31,7 @@ const upload = multer();
 if(!fs.existsSync('./data')) {
     fs.mkdirSync('./data');
 }
-const db = sqlite3('./data/mailspring-api.db');
+const db = new Database('./data/mailspring-api.db');
 db.transaction(() => {
     db.exec('CREATE TABLE IF NOT EXISTS identities(id VARCHAR PRIMARY KEY, firstName VARCHAR, lastName VARCHAR, emailAddress VARCHAR, passwordHash VARCHAR, createdAt VARCHAR, stripePlan VARCHAR, stripePlanEffective VARCHAR, stripeCustomerId VARCHAR, stripePeriodEnd VARCHAR, featureUsage VARCHAR);');
     db.exec('CREATE TABLE IF NOT EXISTS sessions(token VARCHAR PRIMARY KEY, identityId VARCHAR, lastLogin INTEGER);');
@@ -143,8 +145,8 @@ app.get(/\/link\/.+\/.+/, (req, res) => {
         }
     })();
 });
-app.get(/\/page\/[0-9a-z]+/i, (req, res) => {
-    const key = req.path.match(/\/page\/([0-9a-z]+)/i)[1];
+app.get(/\/page\/.+/, (req, res) => {
+    const key = req.path.match(/\/page\/(.+)/)[1];
 
     const stmt = db.prepare('SELECT html FROM shared_pages WHERE key = ?;');
     const data = stmt.get(key);
@@ -155,8 +157,8 @@ app.get(/\/page\/[0-9a-z]+/i, (req, res) => {
         res.status(404).end('Invalid or expired link.');
     }
 });
-app.get(/\/asset\/[0-9a-z]+/i, (req, res) => {
-    const key = req.path.match(/\/asset\/([0-9a-z]+)(?:\.[0-9a-z]+)?$/i)[1];
+app.get(/\/asset\/.+/, (req, res) => {
+    const key = req.path.match(/\/asset\/(.*)?\.[^.]*$/)[1];
 
     const stmt = db.prepare('SELECT file, filetype FROM shared_assets WHERE key = ?;');
     const data = stmt.get(key);
@@ -260,7 +262,7 @@ app.post('/api/share-static-page', (req, res) => {
         return;
     }
 
-    const key = crypto.randomBytes(30).toString('hex');
+    const key = cryptoRandomString({length: 40, type: 'alphanumeric'});
     const baseUrl = process.env.SHARE_URL || 'http://localhost:5101';
 
     const stmt = db.prepare('INSERT INTO shared_pages(identityId, key, html, timestamp) VALUES (?, ?, ?, ?);');
@@ -304,7 +306,7 @@ app.post('/api/save-public-asset', upload.single('file'), (req, res) => {
             res.json({link: baseUrl+'/asset/'+asset.key+path.extname(asset.filename)});
         } else {
             // Create new
-            const key = crypto.randomBytes(30).toString('hex');
+            const key = cryptoRandomString({length: 50, type: 'alphanumeric'});
 
             stmt = db.prepare('INSERT INTO shared_assets(identityId, key, filename, filetype, file, timestamp) VALUES (?, ?, ?, ?, ?, ?);');
             stmt.run(req.identity.id, key, req.body.filename, type, blob, Math.round(Date.now()/1000));
